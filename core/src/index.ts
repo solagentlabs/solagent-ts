@@ -1,2 +1,2 @@
-export * from './solana-agent-kit';
-export * from './types';
+export * from './solagent';
+export * from './config';
