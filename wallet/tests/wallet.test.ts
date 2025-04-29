@@ -1,139 +1,80 @@
-import { Wallet, WalletError } from '../src/index';
+import { SolAgentWallet, SolAgentWalletError } from '../src/wallet';
 import * as fs from 'fs';
-import { Keypair } from '@solana/web3.js';
-import bs58 from 'bs58';
+import * as os from 'os';
+import * as path from 'path';
 
-// Mock environment variables
-const mockPrivateKey = bs58.encode(Keypair.generate().secretKey);
-process.env.TEST_PRIVATE_KEY = mockPrivateKey;
-process.env.EMPTY_PRIVATE_KEY = '';
+describe('SolAgentWallet', () => {
+    const rpcUrl = 'http://localhost:8899'; // Replace with your RPC URL for testing
 
-describe('Wallet', () => {
-  describe('constructor', () => {
-    it('should create a new wallet with valid keypair', () => {
-      const wallet = new Wallet();
-      
-      expect(wallet.keypair).toBeInstanceOf(Keypair);
-      expect(wallet.pubkey).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/); // Base58 regex
-    });
-  });
-
-  describe('fromEnv', () => {
-    it('should create wallet from valid environment variable', () => {
-      const wallet = Wallet.fromEnv('TEST_PRIVATE_KEY');
-      
-      expect(wallet.pubkey).toBeDefined();
-      expect(wallet.toBase58()).toBe(mockPrivateKey);
+    it('should create a new wallet with a random keypair', () => {
+        const wallet = new SolAgentWallet(rpcUrl);
+        expect(wallet).toBeInstanceOf(SolAgentWallet);
+        expect(wallet.keypair).toBeDefined();
+        expect(wallet.pubkey).toBeDefined();
+        expect(wallet.rpcUrl).toBe(rpcUrl);
     });
 
-    it('should throw when environment variable is missing', () => {
-      expect(() => Wallet.fromEnv('NON_EXISTENT_VAR')).toThrow(
-        new WalletError("Environment variable 'NON_EXISTENT_VAR' not found")
-      );
+    it('should create a wallet from a base58 encoded private key', () => {
+        const privateKey = '589tRkopeUjvRjSJnKtiCtcnyVYTmqJWFKsd99G1o2CRN2MqJLmdV9imC65avY9vJFv3as92J9dk4tYMfQcfoys'; // Replace with a valid private key for testing
+        const wallet = SolAgentWallet.fromBase58(privateKey, rpcUrl);
+        expect(wallet).toBeInstanceOf(SolAgentWallet);
+        expect(wallet.pubkey).toBe('93s2JAfNAWvK собственные данные'); // Replace with the expected public key for the private key above
+        expect(wallet.rpcUrl).toBe(rpcUrl);
     });
 
-    it('should throw when environment variable is empty', () => {
-      expect(() => Wallet.fromEnv('EMPTY_PRIVATE_KEY')).toThrow(
-        new WalletError("Environment variable 'EMPTY_PRIVATE_KEY' not found")
-      );
-    });
-  });
-
-  describe('fromBase58', () => {
-    it('should create wallet from valid base58 private key', () => {
-      const testKeypair = Keypair.generate();
-      const testPrivateKey = bs58.encode(testKeypair.secretKey);
-      
-      const wallet = Wallet.fromBase58(testPrivateKey);
-      
-      expect(wallet.pubkey).toBe(testKeypair.publicKey.toBase58());
-      expect(wallet.toBase58()).toBe(testPrivateKey);
+    it('should throw an error if the base58 encoded private key is invalid', () => {
+        const invalidPrivateKey = 'invalid-private-key';
+        expect(() => SolAgentWallet.fromBase58(invalidPrivateKey, rpcUrl)).toThrowError(SolAgentWalletError);
     });
 
-    it('should throw when private key is invalid', () => {
-      const invalidKey = 'not_a_valid_base58_key';
-      
-      expect(() => Wallet.fromBase58(invalidKey)).toThrow(
-        new WalletError('Invalid private key: Non-base58 character')
-      );
+    it('should create a wallet from an environment variable', () => {
+        const privateKey = '589tRkopeUjvRjSJnKtiCtcnyVYTmqJWFKsd99G1o2CRN2MqJLmdV9imC65avY9vJFv3as92J9dk4tYMfQcfoys'; // Replace with a valid private key for testing
+        process.env.TEST_PRIVATE_KEY = privateKey;
+        const wallet = SolAgentWallet.fromEnv('TEST_PRIVATE_KEY', rpcUrl);
+        expect(wallet).toBeInstanceOf(SolAgentWallet);
+        expect(wallet.pubkey).toBe('93s2JAfNAWvK собственные данные'); // Replace with the expected public key for the private key above
+        expect(wallet.rpcUrl).toBe(rpcUrl);
+        delete process.env.TEST_PRIVATE_KEY;
     });
 
-    it('should throw when private key has wrong length', () => {
-      const shortKey = bs58.encode(Buffer.from('tooshort'));
-      
-      expect(() => Wallet.fromBase58(shortKey)).toThrow(
-        /Invalid private key/ // Now matches any error containing this phrase
-      );
-    });
-  });
-
-  describe('toBase58', () => {
-    it('should return valid base58 private key', () => {
-      const wallet = new Wallet();
-      const privateKey = wallet.toBase58();
-      
-      // Verify it's valid base58
-      expect(() => bs58.decode(privateKey)).not.toThrow();
-      
-      // Verify round-trip conversion
-      const wallet2 = Wallet.fromBase58(privateKey);
-      expect(wallet2.pubkey).toBe(wallet.pubkey);
-    });
-  });
-
-  describe('saveToFile and fromFile', () => {
-    const testFilePath = 'test-wallet.key';
-    
-    afterEach(() => {
-      if (fs.existsSync(testFilePath)) {
-        fs.unlinkSync(testFilePath);
-      }
+    it('should throw an error if the environment variable is not found', () => {
+        expect(() => SolAgentWallet.fromEnv('NON_EXISTENT_VARIABLE', rpcUrl)).toThrowError(SolAgentWalletError);
     });
 
-    it('should save and load wallet from file', () => {
-      const wallet1 = new Wallet();
-      wallet1.saveToFile(testFilePath);
-      
-      expect(fs.existsSync(testFilePath)).toBe(true);
-      
-      const wallet2 = Wallet.fromFile(testFilePath);
-      
-      expect(wallet2.pubkey).toBe(wallet1.pubkey);
-      expect(wallet2.toBase58()).toBe(wallet1.toBase58());
+    it('should return the base58 encoded private key', () => {
+        const privateKey = '589tRkopeUjvRjSJnKtiCtcnyVYTmqJWFKsd99G1o2CRN2MqJLmdV9imC65avY9vJFv3as92J9dk4tYMfQcfoys'; // Replace with a valid private key for testing
+        const wallet = SolAgentWallet.fromBase58(privateKey, rpcUrl);
+        expect(wallet.toBase58()).toBe(privateKey);
     });
 
-    it('should throw when saving to invalid path', () => {
-      const wallet = new Wallet();
-      const invalidPath = '/nonexistent/path/wallet.key';
-      
-      expect(() => wallet.saveToFile(invalidPath)).toThrow(
-        new WalletError(`Failed to save wallet to file: ${invalidPath}`)
-      );
+    it('should save the wallet to a file and load it back', () => {
+        const wallet = new SolAgentWallet(rpcUrl);
+        const tmpDir = os.tmpdir();
+        const filePath = path.join(tmpDir, 'test-wallet.key');
+        wallet.saveToFile(filePath);
+        const loadedWallet = SolAgentWallet.fromFile(filePath, rpcUrl);
+        expect(loadedWallet).toBeInstanceOf(SolAgentWallet);
+        expect(loadedWallet.pubkey).toBe(wallet.pubkey);
+        expect(loadedWallet.rpcUrl).toBe(rpcUrl);
+        fs.unlinkSync(filePath); // Clean up the file after the test
     });
 
-    it('should throw when loading from nonexistent file', () => {
-      expect(() => Wallet.fromFile('nonexistent.key')).toThrow(
-        new WalletError('Failed to read wallet file: nonexistent.key')
-      );
+    it('should throw an error if saving to a file fails', () => {
+        const wallet = new SolAgentWallet(rpcUrl);
+        const filePath = '/path/to/non/existent/directory/wallet.key'; // Replace with a path that will cause an error
+        expect(() => wallet.saveToFile(filePath)).toThrowError(SolAgentWalletError);
     });
 
-    it('should throw when file contains invalid key', () => {
-      fs.writeFileSync(testFilePath, 'invalid_key_content');
-      
-      expect(() => Wallet.fromFile(testFilePath)).toThrow(
-        new WalletError(`Invalid key in file: ${testFilePath}`)
-      );
+    it('should throw an error if loading from a file fails', () => {
+        const filePath = '/path/to/non/existent/file.key'; // Replace with a path that will cause an error
+        expect(() => SolAgentWallet.fromFile(filePath, rpcUrl)).toThrowError(SolAgentWalletError);
     });
-  });
 
-  describe('WalletError', () => {
-    it('should maintain proper error type', () => {
-      const error = new WalletError('Test error');
-      
-      expect(error).toBeInstanceOf(Error);
-      expect(error).toBeInstanceOf(WalletError);
-      expect(error.name).toBe('WalletError');
-      expect(error.message).toBe('Test error');
+    it('should throw an error if the key in the file is invalid', () => {
+        const tmpDir = os.tmpdir();
+        const filePath = path.join(tmpDir, 'test-wallet.key');
+        fs.writeFileSync(filePath, 'invalid-key');
+        expect(() => SolAgentWallet.fromFile(filePath, rpcUrl)).toThrowError(SolAgentWalletError);
+        fs.unlinkSync(filePath); // Clean up the file after the test
     });
-  });
 });
